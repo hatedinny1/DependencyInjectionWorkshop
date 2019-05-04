@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using Dapper;
+using NLog;
 using SlackAPI;
 
 namespace DependencyInjectionWorkshop.Models
@@ -20,6 +21,7 @@ namespace DependencyInjectionWorkshop.Models
             var isLocked = isLockedResponse.Content.ReadAsAsync<bool>().Result;
             if (isLocked)
             {
+
                 throw new FailedTooManyTimesException();
             }
 
@@ -57,6 +59,12 @@ namespace DependencyInjectionWorkshop.Models
                 resetRetryResponse.EnsureSuccessStatusCode();
                 return true;
             }
+
+            var failedCountResponse = httpClient.PostAsJsonAsync("api/failedCounter/GetFailedCount", accountId).Result;
+            failedCountResponse.EnsureSuccessStatusCode();
+            var failedCount = failedCountResponse.Content.ReadAsAsync<int>();
+            var logger = LogManager.GetCurrentClassLogger();
+            logger.Info($"Verify failed, AccountId: {accountId}, FailCount: {failedCount}");
 
             var addRetryCountResponse = httpClient.PostAsJsonAsync("api/failedCounter/Add", accountId).Result;
             addRetryCountResponse.EnsureSuccessStatusCode();
