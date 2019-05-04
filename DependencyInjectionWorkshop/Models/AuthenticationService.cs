@@ -14,15 +14,15 @@ namespace DependencyInjectionWorkshop.Models
         private readonly IFailCounter _failCounter;
         private readonly INotification _slackAdapter;
 
-        public AuthenticationService()
-        {
-            _profileRepository = new ProfileRepository();
-            _sha256Adapter = new Sha256Adapter();
-            _otpService = new OtpService();
-            _nLogAdapter = new NLogAdapter();
-            _failCounter = new FailCounter();
-            _slackAdapter = new SlackAdapter();
-        }
+        //public AuthenticationService()
+        //{
+        //    _profileRepository = new ProfileRepository();
+        //    _sha256Adapter = new Sha256Adapter();
+        //    _otpService = new OtpService();
+        //    _nLogAdapter = new NLogAdapter();
+        //    _failCounter = new FailCounter();
+        //    _slackAdapter = new SlackAdapter();
+        //}
 
         public AuthenticationService(IProfile profileRepository, IHash sha256Adapter, IOtp otpService, ILogger nLogAdapter, IFailCounter failCounter, INotification slackAdapter)
         {
@@ -39,7 +39,7 @@ namespace DependencyInjectionWorkshop.Models
         {
             _failCounter.CheckIsLock(accountId);
 
-            var passwordFromDb = _profileRepository.GetPasswordFromDB(accountId);
+            var passwordFromDb = _profileRepository.GetPassword(accountId);
 
             var hashPassword = _sha256Adapter.GetHash(password);
 
