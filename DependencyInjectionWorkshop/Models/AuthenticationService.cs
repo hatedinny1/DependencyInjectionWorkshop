@@ -13,6 +13,16 @@ namespace DependencyInjectionWorkshop.Models
     {
         public bool Verify(string accountId, string password, string otp)
         {
+            var httpClient = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") };
+
+            var isLockedResponse = httpClient.PostAsJsonAsync("api/failedCounter/IsLocked", accountId).Result;
+            isLockedResponse.EnsureSuccessStatusCode();
+            var isLocked = isLockedResponse.Content.ReadAsAsync<bool>().Result;
+            if (isLocked)
+            {
+                throw new FailedTooManyTimesException();
+            }
+
             string currentPassword;
             using (var connection = new SqlConnection("datasource=db,password=abc"))
             {
@@ -30,7 +40,6 @@ namespace DependencyInjectionWorkshop.Models
 
             var hashPassword = hash.ToString();
 
-            var httpClient = new HttpClient() { BaseAddress = new Uri("http://joey.com/") };
             var response = httpClient.PostAsJsonAsync("api/otps", accountId).Result;
             string currentOtp;
             if (response.IsSuccessStatusCode)
@@ -42,15 +51,36 @@ namespace DependencyInjectionWorkshop.Models
                 throw new Exception($"web api error, accountId:{accountId}");
             }
 
-
             if (hashPassword == currentPassword && otp == currentOtp)
             {
+                var resetRetryResponse = httpClient.PostAsJsonAsync("api/failedCounter/Reset", accountId).Result;
+                resetRetryResponse.EnsureSuccessStatusCode();
                 return true;
             }
 
+            var addRetryCountResponse = httpClient.PostAsJsonAsync("api/failedCounter/Add", accountId).Result;
+            addRetryCountResponse.EnsureSuccessStatusCode();
             var slackClient = new SlackClient("my api token");
             slackClient.PostMessage(response1 => { }, "my channel", "my message", "my bot name");
             return false;
+
+        }
+    }
+
+    public class FailedTooManyTimesException : Exception
+    {
+        public FailedTooManyTimesException() : base()
+        {
+
+        }
+        public FailedTooManyTimesException(string message) : base(message)
+        {
+
+        }
+
+        public FailedTooManyTimesException(string message, Exception innerException) : base(message, innerException)
+        {
+
         }
     }
 }
