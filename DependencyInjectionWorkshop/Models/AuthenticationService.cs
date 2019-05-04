@@ -1,7 +1,7 @@
-﻿using System;
-using DependencyInjectionWorkshop.Adapter;
+﻿using DependencyInjectionWorkshop.Adapter;
 using DependencyInjectionWorkshop.Proxy;
 using DependencyInjectionWorkshop.Repository;
+using System;
 
 namespace DependencyInjectionWorkshop.Models
 {
@@ -34,10 +34,13 @@ namespace DependencyInjectionWorkshop.Models
             _slackAdapter = slackAdapter;
         }
 
-
         public bool Verify(string accountId, string password, string otp)
         {
-            _failCounter.CheckIsLock(accountId);
+            var isLock = _failCounter.CheckIsLock(accountId);
+            if (isLock)
+            {
+                throw new FailedTooManyTimesException();
+            }
 
             var passwordFromDb = _profileRepository.GetPassword(accountId);
 

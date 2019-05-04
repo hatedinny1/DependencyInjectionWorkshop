@@ -22,6 +22,22 @@ namespace DependencyInjectionWorkshopTests
         private IOtp _otpService;
         private IProfile _profile;
         private IHash _sha256Adapter;
+
+        [Test]
+        public void account_is_lock()
+        {
+            _failCounter.CheckIsLock(DefaultAccountId).ReturnsForAnyArgs(true);
+            TestDelegate action = () => _authenticationService.Verify(DefaultAccountId, DefaultHashPassword, DefaultOtp);
+            Assert.Throws<FailedTooManyTimesException>(action);
+        }
+
+        [Test]
+        public void add_failed_count_when_invalid()
+        {
+            WhenInvalid();
+            ShouldAddFailedCount();
+        }
+
         [Test]
         public void is_invalid_when_wrong_otp()
         {
@@ -36,8 +52,7 @@ namespace DependencyInjectionWorkshopTests
             GivenPassword(DefaultAccountId, DefaultHashPassword);
             GivenHash(DefaultPassword, DefaultHashPassword);
 
-            var isValid1 = _authenticationService.Verify(DefaultAccountId, DefaultPassword, DefaultOtp);
-            var isValid = isValid1;
+            var isValid = _authenticationService.Verify(DefaultAccountId, DefaultPassword, DefaultOtp);
             ShouldBeValid(isValid);
         }
 
@@ -58,6 +73,13 @@ namespace DependencyInjectionWorkshopTests
             ShouldNotifyUser();
         }
 
+        [Test]
+        public void reset_failed_count_when_valid()
+        {
+            WhenValid();
+            ShouldResetFailedAccount();
+        }
+
         [SetUp]
         public void SetUp()
         {
@@ -70,10 +92,12 @@ namespace DependencyInjectionWorkshopTests
             _authenticationService = new AuthenticationService(_profile, _sha256Adapter, _otpService, _logger,
                 _failCounter, _notification);
         }
+
         private static void ShouldBeInvalid(bool isValid)
         {
             Assert.IsFalse(isValid);
         }
+
         private static void ShouldBeValid(bool isValid)
         {
             Assert.IsTrue(isValid);
@@ -99,9 +123,19 @@ namespace DependencyInjectionWorkshopTests
             _logger.Received(1).Info(Arg.Is<string>(m => m.Contains(accountId) && m.Contains(failedCount)));
         }
 
+        private void ShouldAddFailedCount()
+        {
+            _failCounter.Received().Add(Arg.Any<string>());
+        }
+
         private void ShouldNotifyUser()
         {
             _notification.Received(1).PushMessage(Arg.Any<string>());
+        }
+
+        private void ShouldResetFailedAccount()
+        {
+            _failCounter.Received().Reset(Arg.Any<string>());
         }
 
         private bool WhenInvalid()
@@ -111,6 +145,14 @@ namespace DependencyInjectionWorkshopTests
             GivenHash(DefaultPassword, DefaultHashPassword);
 
             return _authenticationService.Verify(DefaultAccountId, DefaultPassword, "wrong otp");
+        }
+
+        private void WhenValid()
+        {
+            GivenOtp(DefaultAccountId, DefaultOtp);
+            GivenPassword(DefaultAccountId, DefaultHashPassword);
+            GivenHash(DefaultPassword, DefaultHashPassword);
+            _authenticationService.Verify(DefaultAccountId, DefaultPassword, DefaultOtp);
         }
     }
 }
