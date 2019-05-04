@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using Dapper;
+using SlackAPI;
 
 namespace DependencyInjectionWorkshop.Models
 {
@@ -12,6 +13,13 @@ namespace DependencyInjectionWorkshop.Models
     {
         public bool Verify(string accountId, string password, string otp)
         {
+            string currentPassword;
+            using (var connection = new SqlConnection("datasource=db,password=abc"))
+            {
+                currentPassword = connection.Query<string>("spGetUserPassword", new { Id = accountId },
+                    commandType: CommandType.StoredProcedure).SingleOrDefault();
+            }
+
             var crypt = new System.Security.Cryptography.SHA256Managed();
             var hash = new StringBuilder();
             var crypto = crypt.ComputeHash(Encoding.UTF8.GetBytes(password));
@@ -19,27 +27,30 @@ namespace DependencyInjectionWorkshop.Models
             {
                 hash.Append(theByte.ToString("x2"));
             }
-            var sourcePasswordHash = hash.ToString();
 
-            using (var connection = new SqlConnection("my connection string"))
-            {
-                var passwordHash = connection.Query<string>("spGetUserPassword", new { Id = accountId },
-                    commandType: CommandType.StoredProcedure).SingleOrDefault();
-                if (sourcePasswordHash != passwordHash)
-                {
-                    return false;
-                }
-            }
+            var hashPassword = hash.ToString();
 
             var httpClient = new HttpClient() { BaseAddress = new Uri("http://joey.com/") };
             var response = httpClient.PostAsJsonAsync("api/otps", accountId).Result;
+            string currentOtp;
             if (response.IsSuccessStatusCode)
             {
-                var otpResult = response.Content.ReadAsAsync<string>().Result;
-                return otpResult == otp;
+                currentOtp = response.Content.ReadAsAsync<string>().Result;
+            }
+            else
+            {
+                throw new Exception($"web api error, accountId:{accountId}");
             }
 
-            throw new Exception($"web api error, accountId:{accountId}");
+
+            if (hashPassword == currentPassword && otp == currentOtp)
+            {
+                return true;
+            }
+
+            var slackClient = new SlackClient("my api token");
+            slackClient.PostMessage(response1 => { }, "my channel", "my message", "my bot name");
+            return false;
         }
     }
 }
