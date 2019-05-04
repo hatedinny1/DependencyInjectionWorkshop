@@ -75,7 +75,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Adapter\LogAdapter.cs" />
+    <Compile Include="Adapter\NLogAdapter.cs" />
     <Compile Include="Adapter\Sha256Adapter.cs" />
     <Compile Include="Adapter\SlackAdapter.cs" />
     <Compile Include="Models\AuthenticationService.cs" />

@@ -3,21 +3,29 @@ using System.Net.Http;
 
 namespace DependencyInjectionWorkshop.Models
 {
-    public class FailCounter
+    public interface IFailCounter
     {
-        public void ResetFailCounter(string accountId)
+        void Reset(string accountId);
+        void Add(string accountId);
+        int Get(string accountId);
+        void CheckIsLock(string accountId);
+    }
+
+    public class FailCounter : IFailCounter
+    {
+        public void Reset(string accountId)
         {
             var resetRetryResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/Reset", accountId).Result;
             resetRetryResponse.EnsureSuccessStatusCode();
         }
 
-        public void AddFailedCount(string accountId)
+        public void Add(string accountId)
         {
             var addRetryCountResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/Add", accountId).Result;
             addRetryCountResponse.EnsureSuccessStatusCode();
         }
 
-        public int GetFailedCount(string accountId)
+        public int Get(string accountId)
         {
             var failedCountResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/GetFailedCount", accountId).Result;
             failedCountResponse.EnsureSuccessStatusCode();
