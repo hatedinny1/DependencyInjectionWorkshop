@@ -1,76 +1,42 @@
-﻿using System;
+﻿using Dapper;
+using NLog;
+using SlackAPI;
+using System;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
-using Dapper;
-using NLog;
-using SlackAPI;
 
 namespace DependencyInjectionWorkshop.Models
 {
-    public class AuthenticationService
+    public class ProfileRepository
     {
-        public bool Verify(string accountId, string password, string otp)
+        public string GetPasswordFromDB(string accountId)
         {
-            CheckIsLock(accountId);
-
-            var passwordFromDb = GetPasswordFromDB(accountId);
-
-            var hashPassword = GetHashPassword(password);
-
-            var currentOtp = GetCurrentOtp(accountId);
-
-            if (hashPassword == passwordFromDb && otp == currentOtp)
+            string currentPassword;
+            using (var connection = new SqlConnection("datasource=db,password=abc"))
             {
-                ResetFailCounter(accountId);
-                return true;
+                currentPassword = connection.Query<string>("spGetUserPassword", new { Id = accountId },
+                    commandType: CommandType.StoredProcedure).SingleOrDefault();
             }
 
-            AddFailedCount(accountId);
-
-            var failedCount = GetFailedCount(accountId);
-            LogFailedCount($"Verify failed, AccountId: {accountId}, FailCount: {failedCount}");
-
-            Notify("my message");
-            return false;
-
+            return currentPassword;
         }
+    }
 
-        private static void Notify(string message)
+    public class SlackAdapter
+    {
+        public void Notify(string message)
         {
             var slackClient = new SlackClient("my api token");
             slackClient.PostMessage(response1 => { }, "my channel", message, "my bot name");
         }
+    }
 
-        private static void LogFailedCount(string message)
-        {
-            var logger = LogManager.GetCurrentClassLogger();
-            logger.Info(message);
-        }
-
-        private static int GetFailedCount(string accountId)
-        {
-            var failedCountResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/GetFailedCount", accountId).Result;
-            failedCountResponse.EnsureSuccessStatusCode();
-            var failedCount = failedCountResponse.Content.ReadAsAsync<int>().Result;
-            return failedCount;
-        }
-
-        private static void AddFailedCount(string accountId)
-        {
-            var addRetryCountResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/Add", accountId).Result;
-            addRetryCountResponse.EnsureSuccessStatusCode();
-        }
-
-        private static void ResetFailCounter(string accountId)
-        {
-            var resetRetryResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/Reset", accountId).Result;
-            resetRetryResponse.EnsureSuccessStatusCode();
-        }
-
-        private static string GetCurrentOtp(string accountId)
+    public class OtpService
+    {
+        public string GetCurrentOtp(string accountId)
         {
             var response = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/otps", accountId).Result;
             string currentOtp;
@@ -85,8 +51,11 @@ namespace DependencyInjectionWorkshop.Models
 
             return currentOtp;
         }
+    }
 
-        private static string GetHashPassword(string password)
+    public class Sha256Adapter
+    {
+        public string GetHashPassword(string password)
         {
             var crypt = new System.Security.Cryptography.SHA256Managed();
             var hash = new StringBuilder();
@@ -99,20 +68,31 @@ namespace DependencyInjectionWorkshop.Models
             var hashPassword = hash.ToString();
             return hashPassword;
         }
+    }
 
-        private static string GetPasswordFromDB(string accountId)
+    public class FailCounter
+    {
+        public void ResetFailCounter(string accountId)
         {
-            string currentPassword;
-            using (var connection = new SqlConnection("datasource=db,password=abc"))
-            {
-                currentPassword = connection.Query<string>("spGetUserPassword", new { Id = accountId },
-                    commandType: CommandType.StoredProcedure).SingleOrDefault();
-            }
-
-            return currentPassword;
+            var resetRetryResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/Reset", accountId).Result;
+            resetRetryResponse.EnsureSuccessStatusCode();
         }
 
-        private static void CheckIsLock(string accountId)
+        public void AddFailedCount(string accountId)
+        {
+            var addRetryCountResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/Add", accountId).Result;
+            addRetryCountResponse.EnsureSuccessStatusCode();
+        }
+
+        public int GetFailedCount(string accountId)
+        {
+            var failedCountResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/GetFailedCount", accountId).Result;
+            failedCountResponse.EnsureSuccessStatusCode();
+            var failedCount = failedCountResponse.Content.ReadAsAsync<int>().Result;
+            return failedCount;
+        }
+
+        public void CheckIsLock(string accountId)
         {
             var isLockedResponse = new HttpClient() { BaseAddress = new Uri("http://joey.dev/") }.PostAsJsonAsync("api/failedCounter/IsLocked", accountId).Result;
             isLockedResponse.EnsureSuccessStatusCode();
@@ -124,20 +104,62 @@ namespace DependencyInjectionWorkshop.Models
         }
     }
 
+    public class LogAdapter
+    {
+        public void LogFailedCount(string message)
+        {
+            var logger = LogManager.GetCurrentClassLogger();
+            logger.Info(message);
+        }
+    }
+
+    public class AuthenticationService
+    {
+        private readonly ProfileRepository _profileRepository = new ProfileRepository();
+        private readonly SlackAdapter _slackAdapter = new SlackAdapter();
+        private readonly OtpService _otpService = new OtpService();
+        private readonly Sha256Adapter _sha256Adapter = new Sha256Adapter();
+        private readonly FailCounter _failCounter = new FailCounter();
+        private readonly LogAdapter _logAdapter = new LogAdapter();
+
+        public bool Verify(string accountId, string password, string otp)
+        {
+            _failCounter.CheckIsLock(accountId);
+
+            var passwordFromDb = _profileRepository.GetPasswordFromDB(accountId);
+
+            var hashPassword = _sha256Adapter.GetHashPassword(password);
+
+            var currentOtp = _otpService.GetCurrentOtp(accountId);
+
+            if (hashPassword == passwordFromDb && otp == currentOtp)
+            {
+                _failCounter.ResetFailCounter(accountId);
+                return true;
+            }
+
+            _failCounter.AddFailedCount(accountId);
+
+            var failedCount = _failCounter.GetFailedCount(accountId);
+            _logAdapter.LogFailedCount($"Verify failed, AccountId: {accountId}, FailCount: {failedCount}");
+
+            _slackAdapter.Notify("my message");
+            return false;
+        }
+    }
+
     public class FailedTooManyTimesException : Exception
     {
         public FailedTooManyTimesException() : base()
         {
-
         }
+
         public FailedTooManyTimesException(string message) : base(message)
         {
-
         }
 
         public FailedTooManyTimesException(string message, Exception innerException) : base(message, innerException)
         {
-
         }
     }
 }
