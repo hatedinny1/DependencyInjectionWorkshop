@@ -19,8 +19,9 @@ namespace DependencyInjectionWorkshopTests
             _failCounter = Substitute.For<IFailCounter>();
             _sha256Adapter = Substitute.For<IHash>();
             _logger = Substitute.For<ILogger>();
-            _authenticationService = new AuthenticationService(_profile, _sha256Adapter, _otpService, _logger,
-                _failCounter, _notification);
+            var authenticationServiceBase = new AuthenticationService(_profile, _sha256Adapter, _otpService);
+            _authenticationService = new FailCounterDecorator(new NotificationDecorator(authenticationServiceBase, _notification), _failCounter);
+            _authenticationService = new LoggerDecorator(_authenticationService, _failCounter, _logger);
         }
 
         private const string DefaultAccountId = "joey";
@@ -28,7 +29,7 @@ namespace DependencyInjectionWorkshopTests
         private const string DefaultHashPassword = "my hash password";
         private const string DefaultOtp = "123456";
         private const string DefaultPassword = "pw";
-        private AuthenticationService _authenticationService;
+        private IAuthenticationService _authenticationService;
         private IFailCounter _failCounter;
         private ILogger _logger;
         private INotification _notification;
